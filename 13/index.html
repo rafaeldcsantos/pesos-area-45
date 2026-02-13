@@ -13,7 +13,8 @@
 <style>
   body {
     font-family: Arial, sans-serif;
-    margin: 0;
+    margin: 0 auto;
+    width: 2048px;
     background: #fafafa;
   }
 
@@ -23,15 +24,29 @@
   }
 
   .chart {
-    flex: 1;
+    flex: 0 0 40%;
+    max-width: 40%;
     padding: 20px;
   }
 
   .table-container {
-    flex: 1;
+    flex: 0 0 60%;
+    max-width: 60%;
     padding: 20px;
     overflow-y: auto;
     border-left: 1px solid #ccc;
+  }
+
+  .chart,
+  .table-container {
+    box-sizing: border-box;
+    min-width: 0;
+  }
+
+  .chart svg {
+    width: 100%;
+    height: auto;
+    display: block;
   }
 
   table {
@@ -142,8 +157,9 @@ Veja também os <a href="https://www.gov.br/capes/pt-br/acesso-a-informacao/acoe
 
 // ------ Chart Code (unchanged from previous) ------
 
-const width = 600;
-const radius = width / 2;
+const chartContainer = document.getElementById("chart");
+const width = Math.max(420, Math.min(700, chartContainer.clientWidth - 40));
+const radius = width * 0.44;
 const donutHole = radius * 0.1;
 
 function computeEffectiveValues(node, accumulatedWeight = 1) {
@@ -225,7 +241,11 @@ svg.selectAll("text")
     })
     .attr("text-anchor", "middle")
     .attr("alignment-baseline", "middle")
-    .style("font-size", d => `${10 + (3 - d.depth) * 3}px`)
+    .style("font-size", d => {
+      if (d.depth === 1) return "26px";
+      if (d.depth === 2) return "19px";
+      return "12px";
+    })
     .text(d => d.data.label || d.data.name);
 
 // ------ Table generation from hierarchy (correct color and indentation) ------

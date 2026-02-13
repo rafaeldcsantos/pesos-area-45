@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Treemap - Pesos da Ficha de Avaliacao da Area Interdisciplinar</title>
+
+<!-- Load data file first -->
+<script src="pesos45.js"></script>
+
+<!-- Load D3.js -->
+<script src="https://d3js.org/d3.v7.min.js"></script>
+
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0 auto;
+    width: 2048px;
+    background: #fafafa;
+  }
+
+  .page-header {
+    background-color: #444;
+    color: white;
+    padding: 20px;
+    font-size: 28px;
+    text-align: center;
+    font-weight: bold;
+  }
+
+  .subheader {
+    margin: 16px 20px 0;
+    color: #444;
+    font-size: 15px;
+  }
+
+  .chart-table-container {
+    display: flex;
+    border: 3px solid #ccc;
+    margin: 20px;
+    background: white;
+  }
+
+  .chart-panel {
+    flex: 0 0 40%;
+    max-width: 40%;
+    padding: 12px;
+    box-sizing: border-box;
+  }
+
+  .table-container {
+    flex: 0 0 60%;
+    max-width: 60%;
+    padding: 12px;
+    box-sizing: border-box;
+    border-left: 1px solid #ccc;
+    max-height: 1120px;
+    overflow-y: auto;
+  }
+
+  #chart svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  th, td {
+    border: 1px solid #ccc;
+    padding: 2px 6px;
+    text-align: left;
+  }
+
+  th {
+    background: #eee;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  tr:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+
+  tr.top-level:hover {
+    background-color: unset;
+    filter: brightness(0.9);
+  }
+
+  tr.row-highlight {
+    outline: 2px solid #333;
+    outline-offset: -2px;
+  }
+
+  .dot {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 5px;
+  }
+
+  .label {
+    font-size: 12px;
+    pointer-events: none;
+  }
+
+  .label.top {
+    font-size: 14px;
+    font-weight: bold;
+    fill: white;
+  }
+
+  rect.rect-highlight {
+    stroke: #111;
+    stroke-width: 3;
+  }
+
+  .tooltip {
+    position: absolute;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.85);
+    color: white;
+    border-radius: 4px;
+    pointer-events: none;
+    font-size: 12px;
+    visibility: hidden;
+    max-width: 420px;
+    line-height: 1.35;
+  }
+
+  .page-footer {
+    background-color: #666;
+    color: white;
+    padding: 7px;
+    font-size: 18px;
+    text-align: center;
+    font-weight: bold;
+  }
+
+  .page-footer a {
+    color: white;
+  }
+</style>
+</head>
+<body>
+
+<header class="page-header">
+  Treemap - Pesos da Ficha de Avaliacao da Area Interdisciplinar (Programas Academicos)
+</header>
+
+<p class="subheader">
+  Demo alternativo usando os mesmos dados do arquivo <code>pesos45.js</code>.
+  Passe o mouse nos retangulos ou linhas da tabela para destacar os itens.
+</p>
+
+<div class="chart-table-container">
+  <div class="chart-panel">
+    <div id="chart"></div>
+  </div>
+  <div class="table-container">
+    <table id="data-table">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Categoria</th>
+          <th>Peso</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<footer class="page-footer">
+  Dados obtidos da <a href="https://www.gov.br/capes/pt-br/acesso-a-informacao/acoes-e-programas/avaliacao/sobre-a-avaliacao/areas-avaliacao/sobre-as-areas-de-avaliacao/colegio-de-ciencias-exatas-tecnologicas-e-multidisciplinar/multidisciplinar/interdisciplinar">Ficha de Avaliacao da Area</a>.
+  Veja tambem os <a href="https://www.gov.br/capes/pt-br/acesso-a-informacao/acoes-e-programas/avaliacao/sobre-a-avaliacao/documentos-do-novo-ciclo-avaliativo-2025-2028">Documentos do novo ciclo avaliativo 2025-2028</a>.
+</footer>
+
+<script>
+function computeEffectiveValues(node, accumulatedWeight = 1) {
+  const currentWeight = ("weight" in node) ? node.weight / 100 : 1;
+  const totalWeight = accumulatedWeight * currentWeight;
+
+  if (node.children) {
+    node.children.forEach(child => computeEffectiveValues(child, totalWeight));
+  } else if ("value" in node) {
+    node.effective_value = node.value * totalWeight;
+  }
+}
+
+computeEffectiveValues(data);
+
+const root = d3.hierarchy(data)
+  .sum(d => d.effective_value || 0)
+  .sort((a, b) => b.value - a.value);
+
+const chartHost = document.getElementById("chart");
+const width = Math.max(760, chartHost.clientWidth - 8);
+const height = Math.round(width * 1.15);
+
+const topNames = (root.children || []).map(d => d.data.name);
+const topColors = d3.scaleOrdinal()
+  .domain(topNames)
+  .range(["#1268AF", "#F3801B", "#74AF03", "#0A8F7A", "#C95A7A"]);
+
+function colorForNode(node) {
+  if (node.depth === 1) return topColors(node.data.name);
+  const topAncestor = node.ancestors().find(d => d.depth === 1);
+  const base = d3.color(topColors(topAncestor.data.name));
+  return base.brighter(0.28 * (node.depth - 1)).formatHex();
+}
+
+function nodeId(node) {
+  const path = node.ancestors()
+    .reverse()
+    .slice(1)
+    .map(d => d.data.label || d.data.name)
+    .join("-");
+  return `id-${path.replace(/[^a-zA-Z0-9_.-]/g, "_")}`;
+}
+
+d3.treemap()
+  .size([width, height])
+  .paddingOuter(2)
+  .paddingInner(2)
+  .paddingTop(d => d.depth === 1 ? 24 : 2)
+  .round(true)(root);
+
+const svg = d3.select("#chart")
+  .append("svg")
+  .attr("viewBox", `0 0 ${width} ${height}`)
+  .attr("width", width)
+  .attr("height", height);
+
+const tooltip = d3.select("#tooltip");
+const nodes = root.descendants().filter(d => d.depth > 0);
+
+nodes.forEach((d, i) => {
+  d.clipId = `clip-${i}`;
+  d.nodeId = nodeId(d);
+});
+
+const cells = svg.selectAll("g.cell")
+  .data(nodes)
+  .join("g")
+  .attr("class", "cell")
+  .attr("data-id", d => d.nodeId)
+  .attr("transform", d => `translate(${d.x0},${d.y0})`);
+
+cells.append("clipPath")
+  .attr("id", d => d.clipId)
+  .append("rect")
+  .attr("width", d => Math.max(0, d.x1 - d.x0))
+  .attr("height", d => Math.max(0, d.y1 - d.y0));
+
+cells.append("rect")
+  .attr("width", d => Math.max(0, d.x1 - d.x0))
+  .attr("height", d => Math.max(0, d.y1 - d.y0))
+  .attr("fill", d => colorForNode(d))
+  .attr("stroke", "#fff")
+  .attr("stroke-width", d => d.depth === 1 ? 2 : 1)
+  .attr("data-id", d => d.nodeId)
+  .on("mouseenter", function(event, d) {
+    d3.select(this).classed("rect-highlight", true);
+    d3.selectAll(`tr[data-id="${d.nodeId}"]`).classed("row-highlight", true);
+  })
+  .on("mousemove", (event, d) => {
+    const pct = (100 * d.value / root.value).toFixed(2);
+    const title = d.data.label ? `${d.data.label} - ${d.data.name}` : d.data.name;
+    tooltip.style("visibility", "visible")
+      .style("top", `${event.pageY + 10}px`)
+      .style("left", `${event.pageX + 10}px`)
+      .html(
+        `<strong>${title}</strong><br>` +
+        `Nivel: ${d.depth}<br>` +
+        `Valor efetivo: ${d.value.toFixed(3)}<br>` +
+        `Participacao no total: ${pct}%`
+      );
+  })
+  .on("mouseout", function(event, d) {
+    tooltip.style("visibility", "hidden");
+    d3.select(this).classed("rect-highlight", false);
+    d3.selectAll(`tr[data-id="${d.nodeId}"]`).classed("row-highlight", false);
+  });
+
+function labelText(d) {
+  if (d.depth === 1) return d.data.name;
+  if (d.depth === 2) return `${d.data.label} ${d.data.name}`;
+  return d.data.label || d.data.name;
+}
+
+cells.filter(d => (d.x1 - d.x0) > 90 && (d.y1 - d.y0) > 26)
+  .append("text")
+  .attr("class", d => d.depth === 1 ? "label top" : "label")
+  .attr("x", 6)
+  .attr("y", d => d.depth === 1 ? 17 : 14)
+  .attr("fill", d => d.depth === 1 ? "white" : "#111")
+  .attr("clip-path", d => `url(#${d.clipId})`)
+  .text(d => labelText(d));
+
+function flattenForTableInOrder(node, depth = 0) {
+  const rows = [];
+
+  if (depth > 0) {
+    rows.push({
+      id: node.nodeId,
+      depth: depth,
+      label: node.data.label || "",
+      categoria: node.data.name,
+      peso: node.value,
+      color: colorForNode(node)
+    });
+  }
+
+  if (node.children) {
+    node.children.forEach(child => {
+      rows.push(...flattenForTableInOrder(child, depth + 1));
+    });
+  }
+
+  return rows;
+}
+
+const rows = flattenForTableInOrder(root);
+const tbody = d3.select("#data-table tbody");
+const formatPeso = d3.format(" 6.3f");
+
+tbody.selectAll("tr")
+  .data(rows)
+  .join("tr")
+  .attr("data-id", d => d.id)
+  .attr("class", d => d.depth === 1 ? "top-level" : null)
+  .attr("style", d => d.depth === 1 ? `background-color:${d.color}; color:white` : "")
+  .html(d => `
+    <td style="padding-left:${d.depth * 8}px; font-size:${d.depth >= 3 ? "12px" : "14px"}">
+      <span class="dot" style="background-color:${d.color}"></span>${d.label}
+    </td>
+    <td style="padding-left:${d.depth * 8}px; font-size:${d.depth >= 3 ? "12px" : "14px"}">
+      ${d.categoria}
+    </td>
+    <td style="font-size:${d.depth >= 3 ? "12px" : "14px"}; text-align:right;">
+      ${formatPeso(d.peso)}
+    </td>
+  `);
+
+tbody.selectAll("tr")
+  .on("mouseenter", function(event, d) {
+    d3.select(this).classed("row-highlight", true);
+    svg.selectAll(`rect[data-id="${d.id}"]`).classed("rect-highlight", true);
+  })
+  .on("mouseleave", function(event, d) {
+    d3.select(this).classed("row-highlight", false);
+    svg.selectAll(`rect[data-id="${d.id}"]`).classed("rect-highlight", false);
+  });
+</script>
+
+</body>
+</html>
